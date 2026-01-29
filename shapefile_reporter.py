@@ -179,52 +179,21 @@ def process_shapefiles(root_folder):
 
 st.title("🗺️ Auditoría de Estructura de Shapefiles")
 st.markdown("""
-Esta aplicación analiza shapefiles para extraer su estructura (campos, tipos, geometría) y generar un reporte Excel.
+Esta aplicación recorre recursivamente una carpeta en busca de archivos `.shp`, 
+extrae su estructura (campos, tipos, geometría) y genera un reporte en Excel formateado.
 """)
 
-# Selector de modo
-modo = st.radio("Selecciona el origen de los datos:", 
-                ["📁 Ruta Local (Solo si corres la app en tu PC)", "📦 Subir Archivo ZIP (Para Streamlit Cloud/Web)"],
-                index=0)
+col1, col2 = st.columns([3, 1])
+with col1:
+    input_folder = st.text_input("Ruta de la carpeta a analizar (Copia y pega la ruta local):", value="")
+with col2:
+    st.write("") # Espaciador
+    st.write("") 
+    process_btn = st.button("🚀 Procesar Carpeta", type="primary")
 
-input_folder = None
-temp_dir = None
-
-if "Ruta Local" in modo:
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        input_folder_text = st.text_input("Ruta de la carpeta a analizar (Copia y pega la ruta local):", value="")
-    with col2:
-        st.write("") 
-        st.write("") 
-        process_btn = st.button("🚀 Procesar Carpeta Local", type="primary")
-    
-    if process_btn:
-        input_folder = input_folder_text
-
-elif "Subir Archivo ZIP" in modo:
-    uploaded_file = st.file_uploader("Sube un archivo .zip que contenga tus shapefiles (incluyendo .shp, .shx, .dbf, etc.)", type="zip")
-    if uploaded_file is not None:
-        process_btn = st.button("🚀 Procesar ZIP", type="primary")
-        if process_btn:
-            # Crear directorio temporal
-            temp_dir = tempfile.mkdtemp()
-            zip_path = os.path.join(temp_dir, "upload.zip")
-            
-            # Guardar y descomprimir
-            with open(zip_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
-            
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(temp_dir)
-            
-            input_folder = temp_dir
-            st.info(f"📂 Archivos descomprimidos temporalmente para análisis.")
-
-# Lógica de procesamiento
-if input_folder:
-    if "Ruta Local" in modo and (not os.path.exists(input_folder)):
-        st.error("❌ Por favor ingresa una ruta de carpeta válida. Nota: En Streamlit Cloud no puedes leer tu disco C:, usa la opción de subir ZIP.")
+if process_btn:
+    if not input_folder or not os.path.exists(input_folder):
+        st.error("❌ Por favor ingresa una ruta de carpeta válida. Asegúrate de que la carpeta existe en tu PC.")
     else:
         with st.spinner("Escaneando shapefiles... esto puede tomar un momento."):
             excel_data, df_result, logs = process_shapefiles(input_folder)
