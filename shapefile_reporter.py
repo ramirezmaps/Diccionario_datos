@@ -179,57 +179,73 @@ def process_shapefiles(root_folder):
 
 st.title("🗺️ Auditoría de Estructura de Shapefiles")
 st.markdown("""
-Esta aplicación recorre recursivamente una carpeta en busca de archivos `.shp`, 
-extrae su estructura (campos, tipos, geometría) y genera un reporte en Excel formateado.
+Esta aplicación analiza shapefiles contenidos en un archivo ZIP. 
+Sube tu archivo ZIP para extraer la estructura (campos, tipos, geometría) y generar un reporte en Excel.
 """)
 
-col1, col2 = st.columns([3, 1])
-with col1:
-    input_folder = st.text_input("Ruta de la carpeta a analizar (Copia y pega la ruta local):", value="")
-with col2:
-    st.write("") # Espaciador
-    st.write("") 
-    process_btn = st.button("🚀 Procesar Carpeta", type="primary")
+temp_dir = None
+input_folder = None
 
-if process_btn:
-    if not input_folder or not os.path.exists(input_folder):
-        st.error("❌ Por favor ingresa una ruta de carpeta válida. Asegúrate de que la carpeta existe en tu PC.")
-    else:
-        with st.spinner("Escaneando shapefiles... esto puede tomar un momento."):
-            excel_data, df_result, logs = process_shapefiles(input_folder)
+uploaded_file = st.file_uploader("Sube un archivo .zip que contenga tus shapefiles (incluyendo .shp, .shx, .dbf, etc.)", type="zip")
+
+if uploaded_file is not None:
+    process_btn = st.button("🚀 Procesar ZIP", type="primary")
+    
+    if process_btn:
+        # Crear directorio temporal
+        temp_dir = tempfile.mkdtemp()
+        zip_path = os.path.join(temp_dir, "upload.zip")
         
-        if excel_data is None or df_result.empty:
-            st.warning("⚠️ No se encontraron archivos .shp en la ruta indicada.")
-            if logs:
-                with st.expander("Ver Errores encontrados"):
-                    for log in logs:
-                        st.write(log)
-        else:
-            st.success(f"✅ Proceso completado. Se analizaron {len(df_result)} campos.")
+        try:
+            # Guardar y descomprimir
+            with open(zip_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
             
-            # Métricas
-            cols = st.columns(3)
-            cols[0].metric("Total Registros (Campos)", len(df_result))
-            cols[1].metric("Shapefiles Únicos", df_result["Nombre Shapefile"].nunique())
-            cols[2].metric("Directorios Escaneados", df_result["Carpeta Base"].nunique())
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+            
+            input_folder = temp_dir
+            st.info(f"📂 Archivos descomprimidos temporalmente para análisis.")
+            
+            with st.spinner("Escaneando shapefiles... esto puede tomar un momento."):
+                excel_data, df_result, logs = process_shapefiles(input_folder)
+            
+            if excel_data is None or df_result.empty:
+                st.warning("⚠️ No se encontraron archivos .shp en el ZIP subido.")
+                if logs:
+                    with st.expander("Ver Errores encontrados"):
+                        for log in logs:
+                            st.write(log)
+            else:
+                st.success(f"✅ Proceso completado. Se analizaron {len(df_result)} campos.")
+                
+                # Métricas
+                cols = st.columns(3)
+                cols[0].metric("Total Registros (Campos)", len(df_result))
+                cols[1].metric("Shapefiles Únicos", df_result["Nombre Shapefile"].nunique())
+                cols[2].metric("Directorios Escaneados", df_result["Carpeta Base"].nunique())
 
-            # Botón de descarga
-            st.download_button(
-                label="📥 Descargar Reporte Excel",
-                data=excel_data,
-                file_name="Reporte_Shapefiles.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-            
-            # Mostrar datos
-            st.subheader("Vista Previa de Datos")
-            st.dataframe(df_result, use_container_width=True)
-            
-            if logs:
-                with st.expander(f"⚠️ Ver Advertencias ({len(logs)})"):
-                    for log in logs:
-                        st.code(log, language="text")
+                # Botón de descarga
+                st.download_button(
+                    label="📥 Descargar Reporte Excel",
+                    data=excel_data,
+                    file_name="Reporte_Shapefiles.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+                
+                # Mostrar datos
+                st.subheader("Vista Previa de Datos")
+                st.dataframe(df_result, use_container_width=True)
+                
+                if logs:
+                    with st.expander(f"⚠️ Ver Advertencias ({len(logs)})"):
+                        for log in logs:
+                            st.code(log, language="text")
 
-    # Limpieza de temporales si se usó ZIP
-    if temp_dir and os.path.exists(temp_dir):
-        shutil.rmtree(temp_dir)
+        except Exception as e:
+            st.error(f"❌ Ocurrió un error al procesar el archivo ZIP: {e}")
+        
+        finally:
+            # Limpieza de temporales
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
